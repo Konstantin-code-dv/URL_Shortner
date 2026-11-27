@@ -2,12 +2,15 @@ package main
 
 import (
 	"URL_Shortner/internal/config"
+	"URL_Shortner/internal/http-server/handlers/redirect"
+	"URL_Shortner/internal/http-server/handlers/url/save"
 	mwLogger "URL_Shortner/internal/http-server/middleware/logger"
 	"URL_Shortner/internal/lib/logger/handlers/slogpretty"
 	"URL_Shortner/internal/lib/logger/sl"
 	"URL_Shortner/internal/storage/sqlite"
 	"log"
 	"log/slog"
+	"net/http"
 	"os"
 	"time"
 
@@ -51,12 +54,37 @@ func main() {
 	//Инициилизация роутера
 	router := chi.NewRouter()
 	router.Use(middleware.RequestID)
-	router.Use(middleware.RealIP)
-	router.Use(middleware.Logger)
+	//router.Use(middleware.Logger)
 	router.Use(mwLogger.New(log)) // кастомный логгер
 	router.Use(middleware.Recoverer)
 	router.Use(middleware.URLFormat)
 	router.Use(middleware.Timeout(60 * time.Second))
+
+	router.Route("/url", func(r chi.Router) {
+		r.Use(middleware.BasicAuth("url-shortener", map[string]string{
+			cfg.HTTPServer.User: cfg.HTTPServer.Password,
+		}))
+
+		r.Post("/", save.New(log, storage))
+		// TODO: add DELETE /url/{id}
+	})
+
+	router.Post("/url", save.New(log, storage))
+	router.Get("/{alias}", redirect.New(log, storage))
+
+	//Запуск сервера
+	log.Info("starting http server", slog.String("addres:", cfg.Address))
+	server := &http.Server{
+		Addr:         cfg.Address,
+		Handler:      router,
+		ReadTimeout:  cfg.HTTPServer.Timeout,
+		WriteTimeout: cfg.HTTPServer.Timeout,
+		IdleTimeout:  cfg.HTTPServer.IdleTimeout,
+	}
+	if err := server.ListenAndServe(); err != nil {
+		slog.Error("failed to start http server", sl.Err(err))
+		os.Exit(1)
+	}
 
 }
 

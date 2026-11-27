@@ -3,6 +3,7 @@ package save
 import (
 	resp "URL_Shortner/internal/lib/api/response"
 	"URL_Shortner/internal/lib/logger/sl"
+	"URL_Shortner/internal/lib/random"
 	"URL_Shortner/internal/storage"
 	"errors"
 	"io"
@@ -27,7 +28,7 @@ type Response struct {
 // TODO: move to config if needed
 const aliasLength = 6
 
-//go:generate go run github.com/vektra/mockery/v2@v2.28.2 --name=URLSaver
+//go:generate go run github.com/vektra/mockery/v3@v3.9.1 --config ./.mockery.yml
 type URLSaver interface {
 	SaveURL(urlToSave string, alias string) (int64, error)
 }
@@ -77,6 +78,7 @@ func New(log *slog.Logger, urlSaver URLSaver) http.HandlerFunc {
 		if alias == "" {
 			alias = random.NewRandomString(aliasLength)
 		}
+		//TODO: написать проверку при пересечении созданного алиаса с существуещим
 
 		id, err := urlSaver.SaveURL(req.URL, alias)
 		if errors.Is(err, storage.ErrURLExists) {
